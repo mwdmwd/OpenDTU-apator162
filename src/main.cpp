@@ -23,6 +23,7 @@
 #include "SunPosition.h"
 #include "Utils.h"
 #include "WebApi.h"
+#include "WmbusApator.h"
 #include "defaults.h"
 #include <Arduino.h>
 #include <LittleFS.h>
@@ -110,6 +111,11 @@ void setup()
     MqttHandleInverter.init(scheduler);
     MqttHandleInverterTotal.init(scheduler);
     MqttHandleHass.init(scheduler);
+
+#ifdef OPENDTU_WMBUS_APATOR
+    // Receive Apator 16-2 water meter telegrams using a CC1101 radio.
+    WmbusApator.init(scheduler);
+#endif
 
     // Initialize WebApi
     ESP_LOGI(TAG, "Initializing WebApi...");

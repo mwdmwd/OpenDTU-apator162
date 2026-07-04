@@ -1,0 +1,80 @@
+#	make
+#	make METER_ID=0x00148686
+#	make METER_ID=0x00148686 MQTT_TOPIC_PREFIX=garden_water
+#	make flash FLASH_PORT=/dev/ttyUSB0 METER_ID=0x00148686
+
+.DEFAULT_GOAL := build
+
+PYTHON ?= python3
+VENV_DIR ?= $(CURDIR)/venv
+PLATFORMIO_CORE_DIR ?= $(CURDIR)/platformio
+PIO ?= $(VENV_DIR)/bin/pio
+PIO_ENV ?= generic_esp32_wmbus_apator
+
+METER_ID ?= 0x00000000
+WMBUS_KEY ?= 00000000000000000000000000000000
+MQTT_TOPIC_PREFIX ?= water_meter
+MQTT_TOPIC_RSSI ?= $(MQTT_TOPIC_PREFIX)/packet_rssi
+MQTT_TOPIC_TOTAL ?= $(MQTT_TOPIC_PREFIX)/total_m3
+MQTT_TOPIC_AVAILABILITY ?= $(MQTT_TOPIC_PREFIX)/availability
+
+CC1101_SCLK ?= GPIO_NUM_22
+CC1101_MOSI ?= GPIO_NUM_21
+CC1101_MISO ?= GPIO_NUM_27
+CC1101_CS ?= GPIO_NUM_26
+CC1101_GDO0 ?= GPIO_NUM_25
+
+EXTRA_BUILD_FLAGS ?=
+FLASH_PORT ?=
+
+WMBUS_BUILD_FLAGS := \
+	-DWMBUS_APATOR_METER_ID=$(METER_ID) \
+	-DWMBUS_APATOR_KEY=\"$(WMBUS_KEY)\" \
+	-DWMBUS_APATOR_MQTT_TOPIC_RSSI=\"$(MQTT_TOPIC_RSSI)\" \
+	-DWMBUS_APATOR_MQTT_TOPIC_TOTAL=\"$(MQTT_TOPIC_TOTAL)\" \
+	-DWMBUS_APATOR_MQTT_TOPIC_AVAILABILITY=\"$(MQTT_TOPIC_AVAILABILITY)\" \
+	-DWMBUS_CC1101_PIN_SCLK=$(CC1101_SCLK) \
+	-DWMBUS_CC1101_PIN_MOSI=$(CC1101_MOSI) \
+	-DWMBUS_CC1101_PIN_MISO=$(CC1101_MISO) \
+	-DWMBUS_CC1101_PIN_CS=$(CC1101_CS) \
+	-DWMBUS_CC1101_PIN_GDO0=$(CC1101_GDO0)
+
+PIO_ENVIRONMENT := PLATFORMIO_CORE_DIR="$(PLATFORMIO_CORE_DIR)" PLATFORMIO_BUILD_FLAGS='$(WMBUS_BUILD_FLAGS) $(EXTRA_BUILD_FLAGS)'
+FLASH_ARGS := $(if $(FLASH_PORT),--upload-port "$(FLASH_PORT)",)
+
+.PHONY: bootstrap build image flash clean distclean help
+
+bootstrap: $(PIO)
+
+$(PIO):
+	$(PYTHON) -m venv "$(VENV_DIR)"
+	"$(VENV_DIR)/bin/python" -m pip install --upgrade pip platformio
+
+build: bootstrap
+	$(PIO_ENVIRONMENT) "$(PIO)" run -e "$(PIO_ENV)"
+
+image: build
+	@printf '%s\n' "$(CURDIR)/.pio/build/$(PIO_ENV)/firmware.factory.bin"
+
+flash: bootstrap
+	$(PIO_ENVIRONMENT) "$(PIO)" run -e "$(PIO_ENV)" -t upload $(FLASH_ARGS)
+
+clean: bootstrap
+	PLATFORMIO_CORE_DIR="$(PLATFORMIO_CORE_DIR)" "$(PIO)" run -e "$(PIO_ENV)" -t clean
+
+distclean:
+	rm -rf "$(VENV_DIR)" "$(PLATFORMIO_CORE_DIR)" .pio
+
+help:
+	@printf '%s\n' \
+		"Targets: build (default), image, flash, clean, distclean" \
+		"Variables:" \
+		"  METER_ID=$(METER_ID)" \
+		"  WMBUS_KEY=$(WMBUS_KEY)" \
+		"  MQTT_TOPIC_PREFIX=$(MQTT_TOPIC_PREFIX)" \
+		"  MQTT_TOPIC_RSSI=$(MQTT_TOPIC_RSSI)" \
+		"  MQTT_TOPIC_TOTAL=$(MQTT_TOPIC_TOTAL)" \
+		"  MQTT_TOPIC_AVAILABILITY=$(MQTT_TOPIC_AVAILABILITY)" \
+		"  FLASH_PORT=$(if $(FLASH_PORT),$(FLASH_PORT),(autodetect))" \
+		"  CC1101_SCLK=$(CC1101_SCLK) CC1101_MOSI=$(CC1101_MOSI) CC1101_MISO=$(CC1101_MISO)" \
+		"  CC1101_CS=$(CC1101_CS) CC1101_GDO0=$(CC1101_GDO0)"
