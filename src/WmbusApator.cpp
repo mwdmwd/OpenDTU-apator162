@@ -68,6 +68,20 @@ constexpr size_t T1ProbeEncodedBytes = 3;
 constexpr size_t SpiDmaAlignment = 4;
 constexpr size_t Cc1101BurstBufferBytes = ((Cc1101FifoBytes + 1 + SpiDmaAlignment - 1) / SpiDmaAlignment) * SpiDmaAlignment;
 constexpr uint16_t ManufacturerApa = ((('A' - 64) * 1024) + (('P' - 64) * 32) + ('A' - 64));
+constexpr int16_t Cc1101RssiOffsetDb = 74;
+
+constexpr int16_t cc1101RssiRegisterToDbm(uint8_t rawRssi)
+{
+    const int16_t signedRssi = rawRssi >= 128
+        ? static_cast<int16_t>(rawRssi) - 256
+        : static_cast<int16_t>(rawRssi);
+    return (signedRssi / 2) - Cc1101RssiOffsetDb;
+}
+
+static_assert(cc1101RssiRegisterToDbm(0x00) == -74);
+static_assert(cc1101RssiRegisterToDbm(0xFF) == -74);
+static_assert(cc1101RssiRegisterToDbm(0xFE) == -75);
+static_assert(cc1101RssiRegisterToDbm(0x80) == -138);
 
 constexpr char TopicRssi[] = WMBUS_APATOR_MQTT_TOPIC_RSSI;
 constexpr char TopicTotal[] = WMBUS_APATOR_MQTT_TOPIC_TOTAL;
@@ -627,7 +641,7 @@ void WmbusApatorClass::loop()
     }
 }
 
-bool WmbusApatorClass::readFrame(std::vector<uint8_t>& frame, int8_t& rssiDbm)
+bool WmbusApatorClass::readFrame(std::vector<uint8_t>& frame, int16_t& rssiDbm)
 {
     std::vector<uint8_t> encoded(T1ProbeEncodedBytes);
     if (!readBytes(encoded.data(), encoded.size(), ReadTimeoutMs)) {
@@ -656,17 +670,7 @@ bool WmbusApatorClass::readFrame(std::vector<uint8_t>& frame, int8_t& rssiDbm)
         return false;
     }
 
-    rssiDbm = [this]() {
-        const int8_t rssiReg = _lastRssiRegister;
-        const int8_t offset = 74;
-        int16_t rssi;
-        if (static_cast<uint8_t>(rssiReg) >= 128) {
-            rssi = ((static_cast<int16_t>(rssiReg) - 256) / 2) - offset;
-        } else {
-            rssi = (rssiReg / 2) - offset;
-        }
-        return static_cast<int8_t>(rssi);
-    }();
+    rssiDbm = cc1101RssiRegisterToDbm(_lastRssiRegister);
 
     frame = std::move(decoded);
     return trimCrcsFrameFormatA(frame);
@@ -693,7 +697,7 @@ bool WmbusApatorClass::readBytes(uint8_t* buffer, size_t length, uint32_t timeou
 
             if (toRead > 0) {
                 if (total == 0) {
-                    _lastRssiRegister = static_cast<int8_t>(readStatusRegister(CC1101_RSSI));
+                    _lastRssiRegister = readStatusRegister(CC1101_RSSI);
                 }
                 if (!readBurst(CC1101_RXFIFO, buffer + total, toRead)) {
                     return false;
@@ -727,7 +731,7 @@ bool WmbusApatorClass::readBytes(uint8_t* buffer, size_t length, uint32_t timeou
     return total == length;
 }
 
-bool WmbusApatorClass::decodeFrame(std::vector<uint8_t>& frame, int8_t rssiDbm, DecodedTelegram& telegram)
+bool WmbusApatorClass::decodeFrame(std::vector<uint8_t>& frame, int16_t rssiDbm, DecodedTelegram& telegram)
 {
     if (frame.size() < 15) {
         return false;
@@ -953,7 +957,7 @@ void WmbusApatorClass::receiverLoop()
         }
 
         std::vector<uint8_t> frame;
-        int8_t rssiDbm = 0;
+        int16_t rssiDbm = 0;
         const bool ok = readFrame(frame, rssiDbm);
         restartRx();
         if (!ok) {

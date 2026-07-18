@@ -22,22 +22,22 @@ private:
     struct DecodedTelegram {
         uint32_t meterId = 0;
         double totalM3 = 0;
-        int8_t rssiDbm = 0;
+        int16_t rssiDbm = 0;
     };
 
     struct QueuedTelegram {
         uint32_t meterId;
         int32_t totalMilliM3;
-        int8_t rssiDbm;
+        int16_t rssiDbm;
     };
 
     void loop();
     bool setupRadio();
     bool configureCc1101();
     void restartRx();
-    bool readFrame(std::vector<uint8_t>& frame, int8_t& rssiDbm);
+    bool readFrame(std::vector<uint8_t>& frame, int16_t& rssiDbm);
     bool readBytes(uint8_t* buffer, size_t length, uint32_t timeoutMs);
-    bool decodeFrame(std::vector<uint8_t>& frame, int8_t rssiDbm, DecodedTelegram& telegram);
+    bool decodeFrame(std::vector<uint8_t>& frame, int16_t rssiDbm, DecodedTelegram& telegram);
     bool extractPayload(std::vector<uint8_t>& frame, size_t& payloadOffset, uint8_t& accessNumber);
     bool decryptAesCbcIvPayload(std::vector<uint8_t>& frame, size_t payloadOffset, uint8_t accessNumber, uint8_t tplNumEncryptedBlocks);
     bool decodeApatorPayload(const std::vector<uint8_t>& payload, double& totalM3) const;
@@ -63,7 +63,7 @@ private:
     uint32_t _lastTelegramMillis = 0;
     bool _availabilityOnline = false;
     bool _availabilityPublished = false;
-    int8_t _lastRssiRegister = 0;
+    uint8_t _lastRssiRegister = 0;
 };
 
 extern WmbusApatorClass WmbusApator;
